@@ -1,33 +1,533 @@
-const cache=new Map();
-const ttl=60_000;
-const stocks=[
- {symbol:'RELIANCE',name:'Reliance Industries Limited',price:1450,change:.62,sector:'Energy'},
- {symbol:'TCS',name:'Tata Consultancy Services Limited',price:3200,change:.44,sector:'Information Technology'},
- {symbol:'HDFCBANK',name:'HDFC Bank Limited',price:1700,change:-.28,sector:'Financial Services'},
- {symbol:'INFY',name:'Infosys Limited',price:1500,change:1.12,sector:'Information Technology'},
- {symbol:'ICICIBANK',name:'ICICI Bank Limited',price:1300,change:.35,sector:'Financial Services'},
- {symbol:'SBIN',name:'State Bank of India',price:800,change:-.18,sector:'Financial Services'},
- {symbol:'BHARTIARTL',name:'Bharti Airtel Limited',price:1750,change:.73,sector:'Telecommunication'},
- {symbol:'ITC',name:'ITC Limited',price:430,change:.21,sector:'Consumer Goods'},
- {symbol:'LT',name:'Larsen & Toubro Limited',price:3600,change:-.15,sector:'Industrials'},
- {symbol:'MARUTI',name:'Maruti Suzuki India Limited',price:12500,change:.38,sector:'Automobile'}
+const cache = new Map();
+const ttl = 60_000;
+const stocks = [
+  {
+    symbol: "RELIANCE",
+    name: "Reliance Industries Limited",
+    price: 1450,
+    change: 0.62,
+    sector: "Energy",
+  },
+  {
+    symbol: "TCS",
+    name: "Tata Consultancy Services Limited",
+    price: 3200,
+    change: 0.44,
+    sector: "Information Technology",
+  },
+  {
+    symbol: "HDFCBANK",
+    name: "HDFC Bank Limited",
+    price: 1700,
+    change: -0.28,
+    sector: "Financial Services",
+  },
+  {
+    symbol: "INFY",
+    name: "Infosys Limited",
+    price: 1500,
+    change: 1.12,
+    sector: "Information Technology",
+  },
+  {
+    symbol: "ICICIBANK",
+    name: "ICICI Bank Limited",
+    price: 1300,
+    change: 0.35,
+    sector: "Financial Services",
+  },
+  {
+    symbol: "SBIN",
+    name: "State Bank of India",
+    price: 800,
+    change: -0.18,
+    sector: "Financial Services",
+  },
+  {
+    symbol: "BHARTIARTL",
+    name: "Bharti Airtel Limited",
+    price: 1750,
+    change: 0.73,
+    sector: "Telecommunication",
+  },
+  {
+    symbol: "ITC",
+    name: "ITC Limited",
+    price: 430,
+    change: 0.21,
+    sector: "Consumer Goods",
+  },
+  {
+    symbol: "LT",
+    name: "Larsen & Toubro Limited",
+    price: 3600,
+    change: -0.15,
+    sector: "Industrials",
+  },
+  {
+    symbol: "MARUTI",
+    name: "Maruti Suzuki India Limited",
+    price: 12500,
+    change: 0.38,
+    sector: "Automobile",
+  },
 ];
-function providerError(payload,message){if(!payload||payload.status==='error'||payload.code||payload.message&&!payload.close)throw Object.assign(new Error(payload?.message||message),{status:502})}
-async function json(url,message){const response=await fetch(url);const payload=await response.json();if(!response.ok)throw Object.assign(new Error(message),{status:502});providerError(payload,message);return payload}
-const mock={async getQuote(symbol){const stock=stocks.find(s=>s.symbol===symbol.toUpperCase());if(!stock)throw Object.assign(new Error('Symbol not found in NSE demo data'),{status:404});return {...stock,currency:'INR',exchange:'NSE',source:'illustrative',marketCap:null,pe:null,weekHigh:null,weekLow:null,volume:null}},async searchStocks(query){return stocks.filter(s=>`${s.symbol} ${s.name}`.toLowerCase().includes(query.toLowerCase())).slice(0,10)},async getHistoricalData(symbol,range='1M'){const quote=await this.getQuote(symbol);return Array.from({length:30},(_,i)=>({date:new Date(Date.now()-(29-i)*86400000).toISOString(),close:Number((quote.price*(.94+i*.002+Math.sin(i/3)*.008)).toFixed(2))}))}};
-const twelveData={
- async getQuote(symbol){const url=new URL('https://api.twelvedata.com/quote');url.search=new URLSearchParams({symbol:`${symbol.toUpperCase()}:NSE`,apikey:process.env.TWELVEDATA_API_KEY}).toString();const q=await json(url,'NSE quote unavailable');const price=Number(q.close),previous=Number(q.previous_close);if(!Number.isFinite(price)||price<=0)throw Object.assign(new Error('Quote unavailable for this NSE symbol'),{status:404});return {symbol:symbol.toUpperCase(),name:q.name||symbol.toUpperCase(),price,change:Number(q.percent_change??(previous?(price-previous)/previous*100:0)),currency:q.currency||'INR',exchange:q.exchange||'NSE',source:'live',sector:null,marketCap:null,pe:null,weekHigh:null,weekLow:null,dayHigh:Number(q.high)||null,dayLow:Number(q.low)||null,volume:Number(q.volume)||null}},
- async searchStocks(query){const url=new URL('https://api.twelvedata.com/symbol_search');url.search=new URLSearchParams({symbol:query,exchange:'NSE',apikey:process.env.TWELVEDATA_API_KEY}).toString();const result=await json(url,'NSE stock search unavailable');return (result.data||[]).filter(x=>x.exchange==='NSE').slice(0,10).map(x=>({symbol:x.symbol,name:x.instrument_name||x.name||x.symbol,exchange:'NSE',currency:'INR'}))},
- async getHistoricalData(symbol,range='1M'){const config={ '1D':['5min',78],'1W':['30min',65],'1M':['1day',30],'3M':['1day',70],'1Y':['1week',52],'5Y':['1month',60],'6M':['1week',26],'ALL':['1month',120] }[range]||['1day',30];const url=new URL('https://api.twelvedata.com/time_series');url.search=new URLSearchParams({symbol:`${symbol.toUpperCase()}:NSE`,interval:config[0],outputsize:String(config[1]),order:'asc',apikey:process.env.TWELVEDATA_API_KEY}).toString();const result=await json(url,'NSE price history unavailable');return (result.values||[]).map(x=>({date:new Date(x.datetime.includes(' ')?`${x.datetime.replace(' ','T')}+05:30`:`${x.datetime}T00:00:00+05:30`).toISOString(),close:Number(x.close)})).filter(x=>Number.isFinite(x.close))}
+function providerError(payload, message) {
+  if (
+    !payload ||
+    payload.status === "error" ||
+    payload.code ||
+    (payload.message && !payload.close)
+  )
+    throw Object.assign(new Error(payload?.message || message), {
+      status: 502,
+    });
+}
+async function json(url, message) {
+  const response = await fetch(url);
+  const payload = await response.json();
+  if (!response.ok) throw Object.assign(new Error(message), { status: 502 });
+  providerError(payload, message);
+  return payload;
+}
+const mock = {
+  async getQuote(symbol) {
+    const stock = stocks.find((s) => s.symbol === symbol.toUpperCase());
+    if (!stock)
+      throw Object.assign(new Error("Symbol not found in NSE demo data"), {
+        status: 404,
+      });
+    return {
+      ...stock,
+      currency: "INR",
+      exchange: "NSE",
+      source: "illustrative",
+      marketCap: null,
+      pe: null,
+      weekHigh: null,
+      weekLow: null,
+      volume: null,
+    };
+  },
+  async searchStocks(query) {
+    return stocks
+      .filter((s) =>
+        `${s.symbol} ${s.name}`.toLowerCase().includes(query.toLowerCase()),
+      )
+      .slice(0, 10);
+  },
+  async getHistoricalData(symbol, range = "1M") {
+    const quote = await this.getQuote(symbol);
+    return Array.from({ length: 30 }, (_, i) => ({
+      date: new Date(Date.now() - (29 - i) * 86400000).toISOString(),
+      close: Number(
+        (quote.price * (0.94 + i * 0.002 + Math.sin(i / 3) * 0.008)).toFixed(2),
+      ),
+    }));
+  },
 };
-const upstox={
- async request(url,message){const token=process.env.UPSTOX_ANALYTICS_TOKEN;if(!token)throw Object.assign(new Error('UPSTOX_ANALYTICS_TOKEN is not configured'),{status:503});const response=await fetch(url,{headers:{Accept:'application/json',Authorization:`Bearer ${token}`}});let payload;try{payload=await response.json()}catch{throw Object.assign(new Error(message),{status:502})}if(!response.ok||payload.status==='error'||payload.errors?.length)throw Object.assign(new Error(payload.errors?.[0]?.message||payload.message||message),{status:502});return payload},
- async findInstrument(symbol){const url=new URL('https://api.upstox.com/v2/instruments/search');url.search=new URLSearchParams({query:symbol,exchanges:'NSE',segments:'EQ',instrument_types:'EQ',page_number:'1',records:'30'}).toString();const result=await this.request(url,'Upstox instrument search failed');const rows=(result.data||[]).filter(x=>x.segment==='NSE_EQ'&&x.instrument_type==='EQ');const normalized=symbol.toUpperCase();return rows.find(x=>String(x.trading_symbol).toUpperCase()===normalized)||rows.find(x=>String(x.short_name||'').toUpperCase()===normalized)||rows[0]||null},
- async getQuote(symbol){const instrument=await this.findInstrument(symbol);if(!instrument)throw Object.assign(new Error(`NSE symbol not found: ${symbol}`),{status:404});const url=new URL('https://api.upstox.com/v2/market-quote/quotes');url.search=new URLSearchParams({instrument_key:instrument.instrument_key}).toString();const result=await this.request(url,'Upstox quote unavailable');const quote=Object.values(result.data||{})[0];const price=Number(quote?.last_price),previous=Number(quote?.ohlc?.close);if(!Number.isFinite(price)||price<=0)throw Object.assign(new Error('Quote unavailable for this NSE symbol'),{status:404});const netChange=Number(quote.net_change)||0;return {symbol:instrument.trading_symbol,name:instrument.name||instrument.short_name||instrument.trading_symbol,price,change:Number((previous?netChange/previous*100:0).toFixed(2)),currency:'INR',exchange:'NSE',source:'live',sector:null,marketCap:null,pe:null,weekHigh:null,weekLow:null,dayHigh:Number(quote.ohlc?.high)||null,dayLow:Number(quote.ohlc?.low)||null,volume:Number(quote.volume)||null}},
- async searchStocks(query){const url=new URL('https://api.upstox.com/v2/instruments/search');url.search=new URLSearchParams({query,exchanges:'NSE',segments:'EQ',instrument_types:'EQ',page_number:'1',records:'30'}).toString();const result=await this.request(url,'Upstox stock search failed');return (result.data||[]).filter(x=>x.segment==='NSE_EQ'&&x.instrument_type==='EQ').slice(0,10).map(x=>({symbol:x.trading_symbol,name:x.name||x.short_name||x.trading_symbol,exchange:'NSE',currency:'INR'}))},
- async getHistoricalData(symbol,range='1M'){const instrument=await this.findInstrument(symbol);if(!instrument)throw Object.assign(new Error(`NSE symbol not found: ${symbol}`),{status:404});const interval=({'1D':['minutes','1'], '1W':['minutes','30'], '1M':['days','1'], '3M':['days','1'], '6M':['weeks','1'], '1Y':['weeks','1'], '5Y':['months','1'], 'ALL':['months','1']})[range]||['days','1'];const days=({'1D':2,'1W':9,'1M':35,'3M':100,'6M':200,'1Y':400,'5Y':1900,'ALL':3650})[range]||35;const to=new Date(),from=new Date(Date.now()-days*86400000),fmt=d=>d.toISOString().slice(0,10);const url=`https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrument.instrument_key)}/${interval[0]}/${interval[1]}/${fmt(to)}/${fmt(from)}`;const result=await this.request(url,'Upstox historical data unavailable');return (result.data?.candles||[]).map(c=>({date:new Date(c[0]).toISOString(),close:Number(c[4])})).filter(x=>Number.isFinite(x.close)).reverse()}, async getMarketHeadlines(){const indices=[{name:"NIFTY 50",query:"Nifty 50",exchange:"NSE",segment:"NSE_INDEX"},{name:"NIFTY BANK",query:"Nifty Bank",exchange:"NSE",segment:"NSE_INDEX"},{name:"NIFTY IT",query:"Nifty IT",exchange:"NSE",segment:"NSE_INDEX"},{name:"SENSEX",query:"SENSEX",exchange:"BSE",segment:"BSE_INDEX"}];return (await Promise.all(indices.map(async index=>{try{const searchUrl=new URL("https://api.upstox.com/v2/instruments/search");searchUrl.search=new URLSearchParams({query:index.query,exchanges:index.exchange,segments:"INDEX",instrument_types:"INDEX",page_number:"1",records:"20"}).toString();const search=await this.request(searchUrl,"Upstox index search failed");const instrument=(search.data||[]).find(item=>item.segment===index.segment&&item.instrument_type==="INDEX");if(!instrument)return null;const quoteUrl=new URL("https://api.upstox.com/v3/market-quote/quotes");quoteUrl.search=new URLSearchParams({instrument_key:instrument.instrument_key}).toString();const response=await this.request(quoteUrl,"Upstox index quote unavailable");const quote=Object.values(response.data||{})[0],price=Number(quote?.last_price),previous=Number(quote?.prev_close_price??quote?.ohlc?.close);if(!Number.isFinite(price)||price<=0)return null;const netChange=Number(quote.net_change)||0;return {name:index.name,price,change:Number((previous?netChange/previous*100:0).toFixed(2)),source:"live",exchange:index.exchange}}catch(error){console.error(`Upstox ${index.name} headline unavailable:`,error.message);return null}}))).filter(Boolean)}
+const twelveData = {
+  async getQuote(symbol) {
+    const url = new URL("https://api.twelvedata.com/quote");
+    url.search = new URLSearchParams({
+      symbol: `${symbol.toUpperCase()}:NSE`,
+      apikey: process.env.TWELVEDATA_API_KEY,
+    }).toString();
+    const q = await json(url, "NSE quote unavailable");
+    const price = Number(q.close),
+      previous = Number(q.previous_close);
+    if (!Number.isFinite(price) || price <= 0)
+      throw Object.assign(new Error("Quote unavailable for this NSE symbol"), {
+        status: 404,
+      });
+    return {
+      symbol: symbol.toUpperCase(),
+      name: q.name || symbol.toUpperCase(),
+      price,
+      change: Number(
+        q.percent_change ??
+          (previous ? ((price - previous) / previous) * 100 : 0),
+      ),
+      currency: q.currency || "INR",
+      exchange: q.exchange || "NSE",
+      source: "live",
+      sector: null,
+      marketCap: null,
+      pe: null,
+      weekHigh: null,
+      weekLow: null,
+      dayHigh: Number(q.high) || null,
+      dayLow: Number(q.low) || null,
+      volume: Number(q.volume) || null,
+    };
+  },
+  async searchStocks(query) {
+    const url = new URL("https://api.twelvedata.com/symbol_search");
+    url.search = new URLSearchParams({
+      symbol: query,
+      exchange: "NSE",
+      apikey: process.env.TWELVEDATA_API_KEY,
+    }).toString();
+    const result = await json(url, "NSE stock search unavailable");
+    return (result.data || [])
+      .filter((x) => x.exchange === "NSE")
+      .slice(0, 10)
+      .map((x) => ({
+        symbol: x.symbol,
+        name: x.instrument_name || x.name || x.symbol,
+        exchange: "NSE",
+        currency: "INR",
+      }));
+  },
+  async getHistoricalData(symbol, range = "1M") {
+    const config = {
+      "1D": ["5min", 78],
+      "1W": ["30min", 65],
+      "1M": ["1day", 30],
+      "3M": ["1day", 70],
+      "1Y": ["1week", 52],
+      "5Y": ["1month", 60],
+      "6M": ["1week", 26],
+      ALL: ["1month", 120],
+    }[range] || ["1day", 30];
+    const url = new URL("https://api.twelvedata.com/time_series");
+    url.search = new URLSearchParams({
+      symbol: `${symbol.toUpperCase()}:NSE`,
+      interval: config[0],
+      outputsize: String(config[1]),
+      order: "asc",
+      apikey: process.env.TWELVEDATA_API_KEY,
+    }).toString();
+    const result = await json(url, "NSE price history unavailable");
+    return (result.values || [])
+      .map((x) => ({
+        date: new Date(
+          x.datetime.includes(" ")
+            ? `${x.datetime.replace(" ", "T")}+05:30`
+            : `${x.datetime}T00:00:00+05:30`,
+        ).toISOString(),
+        close: Number(x.close),
+      }))
+      .filter((x) => Number.isFinite(x.close));
+  },
 };
-const finnhub={async getQuote(symbol){const r=await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${process.env.FINNHUB_API_KEY}`);if(!r.ok)throw new Error('Market data provider unavailable');const q=await r.json();if(!q.c)throw Object.assign(new Error('Quote unavailable'),{status:404});return {symbol,name:symbol,price:q.c,change:q.dp,currency:'USD',source:'live',marketCap:null,pe:null,weekHigh:q.h,weekLow:q.l,volume:q.v}},async searchStocks(query){const r=await fetch(`https://finnhub.io/api/v1/search?q=${encodeURIComponent(query)}&token=${process.env.FINNHUB_API_KEY}`);if(!r.ok)throw new Error('Market data provider unavailable');return (await r.json()).result.slice(0,10).map(x=>({symbol:x.symbol,name:x.description}))},async getHistoricalData(symbol,range='1M'){const days=range==='1Y'?365:range==='5Y'?1825:range==='1W'?7:range==='1D'?1:30;const to=Math.floor(Date.now()/1000),from=to-days*86400;const r=await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${days<=1?'5':days<=7?'30':days<=30?'D':'W'}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`);if(!r.ok)throw new Error('Historical data unavailable');const d=await r.json();return (d.t||[]).map((t,i)=>({date:new Date(t*1000).toISOString(),close:d.c[i]}))}};
-const provider=()=>process.env.MARKET_DATA_PROVIDER==='upstox'?upstox:process.env.MARKET_DATA_PROVIDER==='twelvedata'&&process.env.TWELVEDATA_API_KEY?twelveData:process.env.MARKET_DATA_PROVIDER==='finnhub'&&process.env.FINNHUB_API_KEY?finnhub:mock;
-async function cached(key,fn){const entry=cache.get(key);if(entry&&Date.now()-entry.time<ttl)return entry.value;const value=await fn();cache.set(key,{time:Date.now(),value});return value}
-export const marketDataService={getQuote:s=>cached('q:'+s,()=>provider().getQuote(s)),searchStocks:q=>cached('s:'+q,()=>provider().searchStocks(q)),getHistoricalData:(s,r)=>cached('h:'+s+':'+r,()=>provider().getHistoricalData(s,r)),getMarketHeadlines:()=>cached('market:headlines',()=>provider().getMarketHeadlines?provider().getMarketHeadlines():Promise.resolve([]))};
+const upstox = {
+  async request(url, message) {
+    const token = process.env.UPSTOX_ANALYTICS_TOKEN;
+    if (!token)
+      throw Object.assign(
+        new Error("UPSTOX_ANALYTICS_TOKEN is not configured"),
+        { status: 503 },
+      );
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    });
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      throw Object.assign(new Error(message), { status: 502 });
+    }
+    if (!response.ok || payload.status === "error" || payload.errors?.length)
+      throw Object.assign(
+        new Error(payload.errors?.[0]?.message || payload.message || message),
+        { status: 502 },
+      );
+    return payload;
+  },
+  async findInstrument(symbol) {
+    const url = new URL("https://api.upstox.com/v2/instruments/search");
+    url.search = new URLSearchParams({
+      query: symbol,
+      exchanges: "NSE",
+      segments: "EQ",
+      instrument_types: "EQ",
+      page_number: "1",
+      records: "30",
+    }).toString();
+    const result = await this.request(url, "Upstox instrument search failed");
+    const rows = (result.data || []).filter(
+      (x) => x.segment === "NSE_EQ" && x.instrument_type === "EQ",
+    );
+    const normalized = symbol.toUpperCase();
+    return (
+      rows.find((x) => String(x.trading_symbol).toUpperCase() === normalized) ||
+      rows.find(
+        (x) => String(x.short_name || "").toUpperCase() === normalized,
+      ) ||
+      rows[0] ||
+      null
+    );
+  },
+  async getQuote(symbol) {
+    const instrument = await this.findInstrument(symbol);
+    if (!instrument)
+      throw Object.assign(new Error(`NSE symbol not found: ${symbol}`), {
+        status: 404,
+      });
+    const url = new URL("https://api.upstox.com/v2/market-quote/quotes");
+    url.search = new URLSearchParams({
+      instrument_key: instrument.instrument_key,
+    }).toString();
+    const result = await this.request(url, "Upstox quote unavailable");
+    const quote = Object.values(result.data || {})[0];
+    const price = Number(quote?.last_price),
+      previous = Number(quote?.ohlc?.close);
+    if (!Number.isFinite(price) || price <= 0)
+      throw Object.assign(new Error("Quote unavailable for this NSE symbol"), {
+        status: 404,
+      });
+    const netChange = Number(quote.net_change) || 0;
+    return {
+      symbol: instrument.trading_symbol,
+      name:
+        instrument.name || instrument.short_name || instrument.trading_symbol,
+      price,
+      change: Number((previous ? (netChange / previous) * 100 : 0).toFixed(2)),
+      currency: "INR",
+      exchange: "NSE",
+      source: "live",
+      sector: null,
+      marketCap: null,
+      pe: null,
+      weekHigh: null,
+      weekLow: null,
+      dayHigh: Number(quote.ohlc?.high) || null,
+      dayLow: Number(quote.ohlc?.low) || null,
+      volume: Number(quote.volume) || null,
+    };
+  },
+  async searchStocks(query) {
+    const url = new URL("https://api.upstox.com/v2/instruments/search");
+    url.search = new URLSearchParams({
+      query,
+      exchanges: "NSE",
+      segments: "EQ",
+      instrument_types: "EQ",
+      page_number: "1",
+      records: "30",
+    }).toString();
+    const result = await this.request(url, "Upstox stock search failed");
+    return (result.data || [])
+      .filter((x) => x.segment === "NSE_EQ" && x.instrument_type === "EQ")
+      .slice(0, 10)
+      .map((x) => ({
+        symbol: x.trading_symbol,
+        name: x.name || x.short_name || x.trading_symbol,
+        exchange: "NSE",
+        currency: "INR",
+      }));
+  },
+  async getHistoricalData(symbol, range = "1M") {
+    const instrument = await this.findInstrument(symbol);
+    if (!instrument)
+      throw Object.assign(new Error(`NSE symbol not found: ${symbol}`), {
+        status: 404,
+      });
+    const interval = {
+      "1D": ["minutes", "1"],
+      "1W": ["minutes", "30"],
+      "1M": ["days", "1"],
+      "3M": ["days", "1"],
+      "6M": ["weeks", "1"],
+      "1Y": ["weeks", "1"],
+      "5Y": ["months", "1"],
+      ALL: ["months", "1"],
+    }[range] || ["days", "1"];
+    const days =
+      {
+        "1D": 2,
+        "1W": 9,
+        "1M": 35,
+        "3M": 100,
+        "6M": 200,
+        "1Y": 400,
+        "5Y": 1900,
+        ALL: 3650,
+      }[range] || 35;
+    const to = new Date(),
+      from = new Date(Date.now() - days * 86400000),
+      fmt = (d) => d.toISOString().slice(0, 10);
+    const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrument.instrument_key)}/${interval[0]}/${interval[1]}/${fmt(to)}/${fmt(from)}`;
+    const result = await this.request(
+      url,
+      "Upstox historical data unavailable",
+    );
+    return (result.data?.candles || [])
+      .map((c) => ({ date: new Date(c[0]).toISOString(), close: Number(c[4]) }))
+      .filter((x) => Number.isFinite(x.close))
+      .reverse();
+  },
+  async getMarketHeadlines() {
+    const indices = [
+      {
+        name: "NIFTY 50",
+        query: "Nifty 50",
+        exchange: "NSE",
+        segment: "NSE_INDEX",
+      },
+      {
+        name: "NIFTY BANK",
+        query: "Nifty Bank",
+        exchange: "NSE",
+        segment: "NSE_INDEX",
+      },
+      {
+        name: "NIFTY IT",
+        query: "Nifty IT",
+        exchange: "NSE",
+        segment: "NSE_INDEX",
+      },
+      {
+        name: "SENSEX",
+        query: "SENSEX",
+        exchange: "BSE",
+        segment: "BSE_INDEX",
+      },
+    ];
+    return (
+      await Promise.all(
+        indices.map(async (index) => {
+          try {
+            const searchUrl = new URL(
+              "https://api.upstox.com/v2/instruments/search",
+            );
+            searchUrl.search = new URLSearchParams({
+              query: index.query,
+              exchanges: index.exchange,
+              segments: "INDEX",
+              instrument_types: "INDEX",
+              page_number: "1",
+              records: "20",
+            }).toString();
+            const search = await this.request(
+              searchUrl,
+              "Upstox index search failed",
+            );
+            const instrument = (search.data || []).find(
+              (item) =>
+                item.segment === index.segment &&
+                item.instrument_type === "INDEX",
+            );
+            if (!instrument) return null;
+            const quoteUrl = new URL(
+              "https://api.upstox.com/v3/market-quote/quotes",
+            );
+            quoteUrl.search = new URLSearchParams({
+              instrument_key: instrument.instrument_key,
+            }).toString();
+            const response = await this.request(
+              quoteUrl,
+              "Upstox index quote unavailable",
+            );
+            const quote = Object.values(response.data || {})[0],
+              price = Number(quote?.last_price),
+              previous = Number(quote?.prev_close_price ?? quote?.ohlc?.close);
+            if (!Number.isFinite(price) || price <= 0) return null;
+            const netChange = Number(quote.net_change) || 0;
+            return {
+              name: index.name,
+              price,
+              change: Number(
+                (previous ? (netChange / previous) * 100 : 0).toFixed(2),
+              ),
+              source: "live",
+              exchange: index.exchange,
+            };
+          } catch (error) {
+            console.error(
+              `Upstox ${index.name} headline unavailable:`,
+              error.message,
+            );
+            return null;
+          }
+        }),
+      )
+    ).filter(Boolean);
+  },
+};
+const finnhub = {
+  async getQuote(symbol) {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${process.env.FINNHUB_API_KEY}`,
+    );
+    if (!r.ok) throw new Error("Market data provider unavailable");
+    const q = await r.json();
+    if (!q.c)
+      throw Object.assign(new Error("Quote unavailable"), { status: 404 });
+    return {
+      symbol,
+      name: symbol,
+      price: q.c,
+      change: q.dp,
+      currency: "USD",
+      source: "live",
+      marketCap: null,
+      pe: null,
+      weekHigh: q.h,
+      weekLow: q.l,
+      volume: q.v,
+    };
+  },
+  async searchStocks(query) {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/search?q=${encodeURIComponent(query)}&token=${process.env.FINNHUB_API_KEY}`,
+    );
+    if (!r.ok) throw new Error("Market data provider unavailable");
+    return (await r.json()).result
+      .slice(0, 10)
+      .map((x) => ({ symbol: x.symbol, name: x.description }));
+  },
+  async getHistoricalData(symbol, range = "1M") {
+    const days =
+      range === "1Y"
+        ? 365
+        : range === "5Y"
+          ? 1825
+          : range === "1W"
+            ? 7
+            : range === "1D"
+              ? 1
+              : 30;
+    const to = Math.floor(Date.now() / 1000),
+      from = to - days * 86400;
+    const r = await fetch(
+      `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${days <= 1 ? "5" : days <= 7 ? "30" : days <= 30 ? "D" : "W"}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`,
+    );
+    if (!r.ok) throw new Error("Historical data unavailable");
+    const d = await r.json();
+    return (d.t || []).map((t, i) => ({
+      date: new Date(t * 1000).toISOString(),
+      close: d.c[i],
+    }));
+  },
+};
+const provider = () =>
+  process.env.MARKET_DATA_PROVIDER === "upstox"
+    ? upstox
+    : process.env.MARKET_DATA_PROVIDER === "twelvedata" &&
+        process.env.TWELVEDATA_API_KEY
+      ? twelveData
+      : process.env.MARKET_DATA_PROVIDER === "finnhub" &&
+          process.env.FINNHUB_API_KEY
+        ? finnhub
+        : mock;
+async function cached(key, fn) {
+  const entry = cache.get(key);
+  if (entry && Date.now() - entry.time < ttl) return entry.value;
+  const value = await fn();
+  cache.set(key, { time: Date.now(), value });
+  return value;
+}
+export const marketDataService = {
+  getQuote: (s) => cached("q:" + s, () => provider().getQuote(s)),
+  searchStocks: (q) => cached("s:" + q, () => provider().searchStocks(q)),
+  getHistoricalData: (s, r) =>
+    cached("h:" + s + ":" + r, () => provider().getHistoricalData(s, r)),
+  getMarketHeadlines: () =>
+    cached("market:headlines", () =>
+      provider().getMarketHeadlines
+        ? provider().getMarketHeadlines()
+        : Promise.resolve([]),
+    ),
+};

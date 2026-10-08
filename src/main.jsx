@@ -1,1 +1,26 @@
-import React,{useEffect}from'react';import{createRoot}from'react-dom/client';import{BrowserRouter}from'react-router-dom';import{ReactLenis,useLenis}from'lenis/react';import gsap from'gsap';import{ScrollTrigger}from'gsap/ScrollTrigger';import App from'./App.jsx';import'./styles.css';gsap.registerPlugin(ScrollTrigger);function ScrollSync(){useLenis(()=>ScrollTrigger.update());useEffect(()=>{ScrollTrigger.refresh()},[]);return null}createRoot(document.getElementById('root')).render(<React.StrictMode><ReactLenis root options={{duration:1.15,smoothWheel:true}}><ScrollSync/><BrowserRouter><App/></BrowserRouter></ReactLenis></React.StrictMode>);
+import React, { useEffect } from "react";
+import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import { ReactLenis, useLenis } from "lenis/react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import App from "./App.jsx";
+import "./styles.css";
+gsap.registerPlugin(ScrollTrigger);
+function ScrollSync() {
+  useLenis(() => ScrollTrigger.update());
+  useEffect(() => {
+    ScrollTrigger.refresh();
+  }, []);
+  return null;
+}
+createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <ReactLenis root options={{ duration: 1.15, smoothWheel: true }}>
+      <ScrollSync />
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </ReactLenis>
+  </React.StrictMode>,
+);

@@ -1,1 +1,14 @@
-export default {content:['./index.html','./src/**/*.{js,jsx}'],theme:{extend:{colors:{ink:'#090b0b',panel:'#101313',line:'#222827',mint:'#a9f46b'}}},plugins:[]};
+export default {
+  content: ["./index.html", "./src/**/*.{js,jsx}"],
+  theme: {
+    extend: {
+      colors: {
+        ink: "#090b0b",
+        panel: "#101313",
+        line: "#222827",
+        mint: "#a9f46b",
+      },
+    },
+  },
+  plugins: [],
+};
