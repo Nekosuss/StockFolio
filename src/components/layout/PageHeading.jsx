@@ -1,0 +1,16 @@
+import React from "react";
+
+export function PageHeading({ eyebrow, title, description, action }) {
+  return (
+    <div className="page-heading reveal">
+      <div>
+        <div className="eyebrow">{eyebrow}</div>
+        <h1>{title}</h1>
+        {description && <p>{description}</p>}
+      </div>
+      {action && <div>{action}</div>}
+    </div>
+  );
+}
+
+export default PageHeading;
